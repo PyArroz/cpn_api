@@ -5,3 +5,8 @@ export * from './role.controller';
 export * from './office-headquarter.controller';
 export * from './headquarters.controller';
 export * from './office.controller';
+export * from './consultation-office.controller';
+export * from './consultation-user.controller';
+export * from './office-consultation.controller';
+export * from './headquarter-office.controller';
+export * from './consultation.controller';

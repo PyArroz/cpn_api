@@ -1,4 +1,6 @@
-import {Entity, model, property} from '@loopback/repository';
+import {Entity, model, property, belongsTo} from '@loopback/repository';
+import {Office} from './office.model';
+import {User} from './user.model';
 
 @model()
 export class Consultation extends Entity {
@@ -25,6 +27,17 @@ export class Consultation extends Entity {
   })
   isDeleted?: boolean;
 
+  @property({
+    type: 'boolean',
+    default: true
+  })
+  isFlex?: boolean;
+
+  @belongsTo(() => Office)
+  officeId: number;
+
+  @belongsTo(() => User)
+  userId: number;
 
   constructor(data?: Partial<Consultation>) {
     super(data);

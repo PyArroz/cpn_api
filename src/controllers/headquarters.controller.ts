@@ -7,13 +7,13 @@ import {
   Where,
 } from '@loopback/repository';
 import {
-  post,
-  param,
+  del,
   get,
   getModelSchemaRef,
+  param,
   patch,
+  post,
   put,
-  del,
   requestBody,
   response,
 } from '@loopback/rest';
@@ -23,8 +23,8 @@ import {HeadquarterRepository} from '../repositories';
 export class HeadquartersController {
   constructor(
     @repository(HeadquarterRepository)
-    public headquarterRepository : HeadquarterRepository,
-  ) {}
+    public headquarterRepository: HeadquarterRepository,
+  ) { }
 
   @post('/headquarters')
   @response(200, {
@@ -73,7 +73,29 @@ export class HeadquartersController {
   async find(
     @param.filter(Headquarter) filter?: Filter<Headquarter>,
   ): Promise<Headquarter[]> {
-    return this.headquarterRepository.find(filter);
+    return this.headquarterRepository.find({
+      ...filter,
+      where: {...filter?.where, isDeleted: false},
+      include: [
+        {
+          relation: 'offices',
+          scope: {
+            include: [
+              {
+                relation: 'consultations',
+                scope: {
+                  include: [
+                    {
+                      relation: 'user'
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    });
   }
 
   @patch('/headquarters')
@@ -142,9 +164,9 @@ export class HeadquartersController {
 
   @del('/headquarters/{id}')
   @response(204, {
-    description: 'Headquarter DELETE success',
+    description: 'Headquarter soft DELETE success',
   })
   async deleteById(@param.path.number('id') id: number): Promise<void> {
-    await this.headquarterRepository.deleteById(id);
+    await this.headquarterRepository.updateById(id, {isDeleted: true});
   }
 }

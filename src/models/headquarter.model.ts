@@ -1,4 +1,5 @@
-import {Entity, model, property} from '@loopback/repository';
+import {Entity, hasMany, model, property} from '@loopback/repository';
+import {Office} from './office.model';
 
 @model()
 export class Headquarter extends Entity {
@@ -35,6 +36,14 @@ export class Headquarter extends Entity {
   })
   phone?: string;
 
+  @property({
+    type: 'boolean',
+    default: false
+  })
+  isDeleted?: boolean;
+
+  @hasMany(() => Office)
+  offices: Office[];
 
   constructor(data?: Partial<Headquarter>) {
     super(data);

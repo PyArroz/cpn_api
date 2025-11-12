@@ -1,5 +1,6 @@
-import {Entity, model, property, belongsTo} from '@loopback/repository';
+import {Entity, model, property, belongsTo, hasMany} from '@loopback/repository';
 import {Headquarter} from './headquarter.model';
+import {Consultation} from './consultation.model';
 
 @model()
 export class Office extends Entity {
@@ -22,6 +23,9 @@ export class Office extends Entity {
 
   @belongsTo(() => Headquarter)
   headquarterId: number;
+
+  @hasMany(() => Consultation)
+  consultations: Consultation[];
 
   constructor(data?: Partial<Office>) {
     super(data);
