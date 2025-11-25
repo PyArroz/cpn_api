@@ -42,6 +42,18 @@ export class Headquarter extends Entity {
   })
   isDeleted?: boolean;
 
+  @property({
+    type: 'number',
+    dataType: 'FLOAT'
+  })
+  citationFee?: number;
+
+  @property({
+    type: 'date',
+    default: () => new Date(),
+  })
+  updatedAt?: string;
+
   @hasMany(() => Office)
   offices: Office[];
 

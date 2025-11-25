@@ -1,4 +1,4 @@
-import {Entity, model, property, belongsTo} from '@loopback/repository';
+import {belongsTo, Entity, model, property} from '@loopback/repository';
 import {Office} from './office.model';
 import {User} from './user.model';
 
@@ -15,11 +15,6 @@ export class Consultation extends Entity {
     type: 'date',
   })
   startDate?: string;
-
-  @property({
-    type: 'date',
-  })
-  endDate?: string;
 
   @property({
     type: 'boolean',

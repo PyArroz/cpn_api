@@ -10,6 +10,7 @@ import {
   del,
   get,
   getModelSchemaRef,
+  HttpErrors,
   param,
   patch,
   post,
@@ -44,6 +45,13 @@ export class ConsultationController {
     })
     consultation: Omit<Consultation, 'id'>,
   ): Promise<Consultation> {
+    // Verificar conflictos de horario en el mismo consultorio
+    await this.checkTimeConflict(
+      consultation.officeId,
+      consultation.startDate,
+      undefined
+    );
+
     return this.consultationRepository.create(consultation);
   }
 
@@ -131,6 +139,16 @@ export class ConsultationController {
     })
     consultation: Consultation,
   ): Promise<void> {
+    // Si se actualiza officeId o startDate, verificar conflictos
+    if (consultation.officeId || consultation.startDate) {
+      const existing = await this.consultationRepository.findById(id);
+      await this.checkTimeConflict(
+        consultation.officeId || existing.officeId,
+        consultation.startDate || existing.startDate,
+        id
+      );
+    }
+
     await this.consultationRepository.updateById(id, consultation);
   }
 
@@ -147,9 +165,39 @@ export class ConsultationController {
 
   @del('/consultations/{id}')
   @response(204, {
-    description: 'Consultation DELETE success',
+    description: 'Consultation soft DELETE success',
   })
   async deleteById(@param.path.number('id') id: number): Promise<void> {
-    await this.consultationRepository.deleteById(id);
+    await this.consultationRepository.updateById(id, {isDeleted: true});
+  }
+
+  // Método privado para verificar conflictos de horario
+  private async checkTimeConflict(
+    officeId: number,
+    startDate: string | undefined,
+    excludeId?: number
+  ): Promise<void> {
+    if (!startDate) return;
+
+    const where: any = {
+      officeId: officeId,
+      startDate: startDate,
+      isDeleted: false,
+    };
+
+    // Excluir la consulta actual si estamos actualizando
+    if (excludeId) {
+      where.id = {neq: excludeId};
+    }
+
+    const conflictingConsultations = await this.consultationRepository.find({
+      where: where,
+    });
+
+    if (conflictingConsultations.length > 0) {
+      throw new HttpErrors.Conflict(
+        'Ya existe una cita agendada en este consultorio a la misma hora'
+      );
+    }
   }
 }
