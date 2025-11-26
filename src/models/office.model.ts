@@ -1,6 +1,6 @@
-import {Entity, model, property, belongsTo, hasMany} from '@loopback/repository';
-import {Headquarter} from './headquarter.model';
+import {belongsTo, Entity, hasMany, model, property} from '@loopback/repository';
 import {Consultation} from './consultation.model';
+import {Headquarter} from './headquarter.model';
 
 @model()
 export class Office extends Entity {
@@ -13,13 +13,9 @@ export class Office extends Entity {
 
   @property({
     type: 'number',
+    required: true,
   })
   number: number;
-
-  @property({
-    type: 'string',
-  })
-  name?: string;
 
   @belongsTo(() => Headquarter)
   headquarterId: number;

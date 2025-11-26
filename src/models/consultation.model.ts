@@ -17,6 +17,11 @@ export class Consultation extends Entity {
   startDate?: string;
 
   @property({
+    type: 'date',
+  })
+  endDate?: string;
+
+  @property({
     type: 'boolean',
     default: false
   })

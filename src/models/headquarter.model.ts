@@ -54,6 +54,12 @@ export class Headquarter extends Entity {
   })
   updatedAt?: string;
 
+  @property({
+    type: 'any',
+  })
+  config: any;
+
+
   @hasMany(() => Office)
   offices: Office[];
 

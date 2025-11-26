@@ -158,6 +158,11 @@ export class UserController {
       throw new HttpErrors.Unauthorized('Invalid credentials');
     }
 
+    // CHECK IF USER IS ACTIVE
+    // if (!user.active) {
+    //  throw new HttpErrors.Unauthorized('User account is inactive');
+    // }
+
     // COMPARE PASSWORDS
     const passwordMatches = await bcrypt.compare(credentials.password, user.password);
     if (!passwordMatches) {
@@ -205,6 +210,7 @@ export class UserController {
       email: user.email,
       name: user.name,
       lastname: user.lastname,
+      active: user.active,
     });
 
 
