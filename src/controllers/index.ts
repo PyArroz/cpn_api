@@ -10,3 +10,6 @@ export * from './consultation-user.controller';
 export * from './office-consultation.controller';
 export * from './headquarter-office.controller';
 export * from './consultation.controller';
+export * from './user-access-user.controller';
+export * from './user-access-headquarter.controller';
+export * from './user-user-access.controller';

@@ -14,7 +14,7 @@ import {
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import {JwtTokenConfig} from '../config/JwtTokenConfig';
-import {RoleRepository, UserRepository} from '../repositories';
+import {RoleRepository, UserAccessRepository, UserRepository} from '../repositories';
 
 export class UserController {
   constructor(
@@ -22,6 +22,8 @@ export class UserController {
     public userRepository: UserRepository,
     @repository(RoleRepository)
     public roleRepository: RoleRepository,
+    @repository(UserAccessRepository)
+    public userAccessRepository: UserAccessRepository,
   ) { }
 
 
@@ -53,6 +55,12 @@ export class UserController {
       where: {isDeleted: false},
       include: [
         'role',
+        {
+          relation: 'userAccesses',
+          scope: {
+            include: ['headquarter']
+          }
+        }
       ],
     });
 
@@ -82,6 +90,7 @@ export class UserController {
               lastname: {type: 'string'},
               roleName: {type: 'string'},
               phone: {type: 'string'},
+              headquarterIds: {type: 'array', items: {type: 'number'}},
             },
           },
         },
@@ -122,6 +131,16 @@ export class UserController {
       lastname: newUser.lastname,
       phone: newUser.phone
     });
+
+    // Crear userAccesses si se proporcionaron headquarterIds
+    if (newUser.headquarterIds && Array.isArray(newUser.headquarterIds)) {
+      for (const headquarterId of newUser.headquarterIds) {
+        await this.userAccessRepository.create({
+          userId: createdUser.id,
+          headquarterId: headquarterId
+        });
+      }
+    }
 
     return createdUser;
   }
@@ -213,6 +232,24 @@ export class UserController {
       active: user.active,
     });
 
+    // Actualizar userAccesses si se proporcionaron headquarterIds
+    if (user.headquarterIds && Array.isArray(user.headquarterIds)) {
+      // Eliminar todos los userAccesses existentes del usuario
+      const existingAccesses = await this.userAccessRepository.find({
+        where: {userId: user.id}
+      });
+      for (const access of existingAccesses) {
+        await this.userAccessRepository.deleteById(access.id);
+      }
+
+      // Crear los nuevos userAccesses
+      for (const headquarterId of user.headquarterIds) {
+        await this.userAccessRepository.create({
+          userId: user.id,
+          headquarterId: headquarterId
+        });
+      }
+    }
 
     const updatedUser = await this.userRepository.findById(user.id);
 
