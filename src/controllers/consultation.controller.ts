@@ -83,7 +83,7 @@ export class ConsultationController {
   ): Promise<Consultation[]> {
     return this.consultationRepository.find({
       ...filter,
-      where: {...filter?.where, isDeleted: false}
+      where: {...filter?.where, isDeleted: false, isCancelled: false}
     });
   }
 
@@ -171,6 +171,131 @@ export class ConsultationController {
     await this.consultationRepository.updateById(id, {isDeleted: true});
   }
 
+  @patch('/consultations/{id}/cancel')
+  @response(204, {
+    description: 'Consultation CANCEL success',
+  })
+  async cancelById(
+    @param.path.number('id') id: number,
+    @requestBody({
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            properties: {
+              cancellationReason: {
+                type: 'string',
+              },
+            },
+          },
+        },
+      },
+    })
+    body?: {cancellationReason?: string},
+  ): Promise<void> {
+    await this.consultationRepository.updateById(id, {
+      isCancelled: true,
+      cancelledAt: new Date().toISOString(),
+      cancellationReason: body?.cancellationReason,
+    });
+  }
+
+  @post('/consultations/{id}/cancel-date')
+  @response(200, {
+    description: 'Cancel a specific future date from a recurring consultation',
+    content: {'application/json': {schema: getModelSchemaRef(Consultation)}},
+  })
+  async cancelRecurringDate(
+    @param.path.number('id') id: number,
+    @requestBody({
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['startDate'],
+            properties: {
+              startDate: {
+                type: 'string',
+                format: 'date-time',
+              },
+              cancellationReason: {
+                type: 'string',
+              },
+            },
+          },
+        },
+      },
+    })
+    body: {startDate: string; cancellationReason?: string},
+  ): Promise<Consultation> {
+    // Obtener la consulta original para copiar sus datos
+    const originalConsultation = await this.consultationRepository.findById(id);
+
+    if (originalConsultation.isFlex) {
+      throw new HttpErrors.BadRequest(
+        'Solo se pueden cancelar fechas específicas de consultas fijas/recurrentes'
+      );
+    }
+
+    // Determinar el firstId (usar el firstId de la consulta o su propio id si es la primera)
+    const recurringId = originalConsultation.firstId || id;
+
+    // Verificar si ya existe una cancelación para esta fecha
+    const existingCancellation = await this.consultationRepository.findOne({
+      where: {
+        firstId: recurringId,
+        startDate: body.startDate,
+        isCancelled: true,
+      },
+    });
+
+    if (existingCancellation) {
+      throw new HttpErrors.Conflict(
+        'Ya existe una cancelación para esta fecha'
+      );
+    }
+
+    // Crear un registro de cancelación para esta fecha específica
+    const cancellation = await this.consultationRepository.create({
+      firstId: recurringId,
+      startDate: body.startDate,
+      officeId: originalConsultation.officeId,
+      userId: originalConsultation.userId,
+      isCancelled: true,
+      isFlex: false,
+      cancelledAt: new Date().toISOString(),
+      cancellationReason: body.cancellationReason,
+    });
+
+    return cancellation;
+  }
+
+  @get('/consultations/{id}/cancelled-dates')
+  @response(200, {
+    description: 'Get all cancelled dates for a recurring consultation',
+    content: {
+      'application/json': {
+        schema: {
+          type: 'array',
+          items: getModelSchemaRef(Consultation),
+        },
+      },
+    },
+  })
+  async getRecurringCancelledDates(
+    @param.path.number('id') id: number,
+  ): Promise<Consultation[]> {
+    const consultation = await this.consultationRepository.findById(id);
+    const recurringId = consultation.firstId || id;
+
+    return this.consultationRepository.find({
+      where: {
+        firstId: recurringId,
+        isCancelled: true,
+      },
+    });
+  }
+
   // Método privado para verificar conflictos de horario
   private async checkTimeConflict(
     officeId: number,
@@ -179,10 +304,12 @@ export class ConsultationController {
   ): Promise<void> {
     if (!startDate) return;
 
+    // Buscar consultas activas (no eliminadas, no canceladas)
     const where: any = {
       officeId: officeId,
       startDate: startDate,
       isDeleted: false,
+      isCancelled: false,
     };
 
     // Excluir la consulta actual si estamos actualizando
@@ -195,9 +322,29 @@ export class ConsultationController {
     });
 
     if (conflictingConsultations.length > 0) {
-      throw new HttpErrors.Conflict(
-        'Ya existe una cita agendada en este consultorio a la misma hora'
-      );
+      // Verificar si hay una cancelación para alguna de las consultas fijas
+      for (const consultation of conflictingConsultations) {
+        if (!consultation.isFlex && consultation.firstId) {
+          // Es una consulta recurrente, verificar si tiene cancelación para esta fecha
+          const hasCancellation = await this.consultationRepository.findOne({
+            where: {
+              firstId: consultation.firstId,
+              startDate: startDate,
+              isCancelled: true,
+            },
+          });
+
+          if (hasCancellation) {
+            // Hay una cancelación, este horario está disponible
+            continue;
+          }
+        }
+
+        // Si llegamos aquí, hay un conflicto real
+        throw new HttpErrors.Conflict(
+          'Ya existe una cita agendada en este consultorio a la misma hora'
+        );
+      }
     }
   }
 }
