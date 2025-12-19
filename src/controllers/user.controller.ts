@@ -230,6 +230,8 @@ export class UserController {
       name: user.name,
       lastname: user.lastname,
       active: user.active,
+      citationFee: user.citationFee,
+      hasFixedPlan: user.hasFixedPlan,
     });
 
     // Actualizar userAccesses si se proporcionaron headquarterIds

@@ -1,4 +1,4 @@
-import {belongsTo, Entity, model, property, hasMany} from '@loopback/repository';
+import {belongsTo, Entity, hasMany, model, property} from '@loopback/repository';
 import {Role} from './role.model';
 import {UserAccess} from './user-access.model';
 
@@ -71,6 +71,18 @@ export class User extends Entity {
 
   @hasMany(() => UserAccess)
   userAccesses: UserAccess[];
+
+  @property({
+    type: 'number',
+    dataType: 'FLOAT'
+  })
+  citationFee?: number;
+
+  @property({
+    type: 'boolean',
+    default: false
+  })
+  hasFixedPlan?: boolean;
 
   constructor(data?: Partial<User>) {
     super(data);
