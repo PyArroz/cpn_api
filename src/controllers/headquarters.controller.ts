@@ -20,8 +20,8 @@ import {
 } from '@loopback/rest';
 import * as jwt from 'jsonwebtoken';
 import {JwtTokenConfig} from '../config/JwtTokenConfig';
-import {Headquarter} from '../models';
-import {HeadquarterRepository, UserAccessRepository, UserRepository} from '../repositories';
+import {Headquarter, Office} from '../models';
+import {HeadquarterRepository, OfficeRepository, UserAccessRepository, UserRepository} from '../repositories';
 
 export class HeadquartersController {
   constructor(
@@ -31,6 +31,8 @@ export class HeadquartersController {
     public userRepository: UserRepository,
     @repository(UserAccessRepository)
     public userAccessRepository: UserAccessRepository,
+    @repository(OfficeRepository)
+    public officeRepository: OfficeRepository,
   ) { }
 
   @post('/headquarters')
@@ -42,16 +44,52 @@ export class HeadquartersController {
     @requestBody({
       content: {
         'application/json': {
-          schema: getModelSchemaRef(Headquarter, {
-            title: 'NewHeadquarter',
-            exclude: ['id'],
-          }),
+          schema: {
+            type: 'object',
+            required: ['name'],
+            properties: {
+              name: {type: 'string'},
+              address1: {type: 'string'},
+              address2: {type: 'string'},
+              zipCode: {type: 'string'},
+              phone: {type: 'string'},
+              isDeleted: {type: 'boolean'},
+              updatedAt: {type: 'string', format: 'date-time'},
+              config: {},
+              offices: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  required: ['number'],
+                  properties: {
+                    number: {type: 'string'},
+                  },
+                },
+              },
+            },
+          },
         },
       },
     })
-    headquarter: Omit<Headquarter, 'id'>,
+    data: Omit<Headquarter, 'id'> & {offices?: Omit<Office, 'id' | 'headquarterId'>[]},
   ): Promise<Headquarter> {
-    return this.headquarterRepository.create(headquarter);
+    const {offices, ...headquarterData} = data;
+    const createdHeadquarter = await this.headquarterRepository.create(headquarterData);
+
+    // Crear las offices si vienen en el request
+    if (offices && offices.length > 0) {
+      for (const office of offices) {
+        await this.officeRepository.create({
+          ...office,
+          headquarterId: createdHeadquarter.id,
+        });
+      }
+    }
+
+    // Retornar el headquarter con sus offices
+    return this.headquarterRepository.findById(createdHeadquarter.id!, {
+      include: [{relation: 'offices'}],
+    });
   }
 
   @get('/headquarters/count')
@@ -238,21 +276,89 @@ export class HeadquartersController {
   }
 
   @patch('/headquarters/{id}')
-  @response(204, {
+  @response(200, {
     description: 'Headquarter PATCH success',
+    content: {'application/json': {schema: getModelSchemaRef(Headquarter)}},
   })
   async updateById(
     @param.path.number('id') id: number,
     @requestBody({
       content: {
         'application/json': {
-          schema: getModelSchemaRef(Headquarter, {partial: true}),
+          schema: {
+            type: 'object',
+            properties: {
+              name: {type: 'string'},
+              address1: {type: 'string'},
+              address2: {type: 'string'},
+              zipCode: {type: 'string'},
+              phone: {type: 'string'},
+              isDeleted: {type: 'boolean'},
+              updatedAt: {type: 'string', format: 'date-time'},
+              config: {},
+              offices: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: {type: 'number'},
+                    number: {type: 'string'},
+                  },
+                },
+              },
+            },
+          },
         },
       },
     })
-    headquarter: Headquarter,
-  ): Promise<void> {
-    await this.headquarterRepository.updateById(id, headquarter);
+    data: Partial<Headquarter> & {offices?: (Partial<Office> & {id?: number})[]},
+  ): Promise<Headquarter> {
+    const {offices, ...headquarterData} = data;
+
+    // Actualizar headquarter
+    await this.headquarterRepository.updateById(id, headquarterData);
+
+    // Procesar offices si vienen en el request
+    if (offices !== undefined) {
+      // Obtener las offices actuales del headquarter
+      const currentOffices = await this.officeRepository.find({
+        where: {headquarterId: id}
+      });
+
+      // Obtener los IDs de las offices que vienen en el request
+      const requestOfficeIds = offices
+        .filter(o => o.id)
+        .map(o => o.id!);
+
+      // Eliminar las offices que ya no están en el arreglo
+      for (const currentOffice of currentOffices) {
+        if (!requestOfficeIds.includes(currentOffice.id!)) {
+          await this.officeRepository.deleteById(currentOffice.id!);
+        }
+      }
+
+      // Actualizar o crear las offices del request
+      for (const office of offices) {
+        if (office.id) {
+          // Si tiene id, actualizar la office existente
+          await this.officeRepository.updateById(office.id, {
+            ...office,
+            headquarterId: id,
+          });
+        } else {
+          // Si no tiene id, crear una nueva office
+          await this.officeRepository.create({
+            ...office,
+            headquarterId: id,
+          });
+        }
+      }
+    }
+
+    // Retornar el headquarter actualizado con sus offices
+    return this.headquarterRepository.findById(id, {
+      include: [{relation: 'offices'}],
+    });
   }
 
   @put('/headquarters/{id}')

@@ -12,10 +12,10 @@ export class Office extends Entity {
   id?: number;
 
   @property({
-    type: 'number',
+    type: 'string',
     required: true,
   })
-  number: number;
+  number: string;
 
   @belongsTo(() => Headquarter)
   headquarterId: number;
