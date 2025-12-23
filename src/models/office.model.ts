@@ -17,6 +17,12 @@ export class Office extends Entity {
   })
   number: string;
 
+  @property({
+    type: 'string',
+    required: true,
+  })
+  hexColor: string;
+
   @belongsTo(() => Headquarter)
   headquarterId: number;
 

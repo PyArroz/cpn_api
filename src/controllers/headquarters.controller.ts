@@ -60,9 +60,10 @@ export class HeadquartersController {
                 type: 'array',
                 items: {
                   type: 'object',
-                  required: ['number'],
+                  required: ['number', 'hexColor'],
                   properties: {
                     number: {type: 'string'},
+                    hexColor: {type: 'string'},
                   },
                 },
               },
@@ -303,6 +304,7 @@ export class HeadquartersController {
                   properties: {
                     id: {type: 'number'},
                     number: {type: 'string'},
+                    hexColor: {type: 'string'},
                   },
                 },
               },

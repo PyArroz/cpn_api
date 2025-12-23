@@ -125,6 +125,20 @@ export class Consultation extends Entity {
 
   */
 
+  @property({
+    type: 'number',
+    default: 1
+  })
+  weeklyFrequency?: number;
+
+  /*
+
+  Frecuencia semanal para consultas recurrentes.
+  Por ejemplo: 1 = cada semana, 2 = cada 2 semanas, 4 = cada 4 semanas.
+  Solo aplica para consultas fijas (isFlex=false).
+
+  */
+
 
 
   @belongsTo(() => Office)

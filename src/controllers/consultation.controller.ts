@@ -270,6 +270,124 @@ export class ConsultationController {
     return cancellation;
   }
 
+  @post('/consultations/{id}/cancel-from-date')
+  @response(200, {
+    description: 'Cancel a specific date and all subsequent dates from a recurring consultation',
+    content: {
+      'application/json': {
+        schema: {
+          type: 'object',
+          properties: {
+            cancelledCount: {type: 'number'},
+            message: {type: 'string'},
+          },
+        },
+      },
+    },
+  })
+  async cancelRecurringFromDate(
+    @param.path.number('id') id: number,
+    @requestBody({
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['startDate'],
+            properties: {
+              startDate: {
+                type: 'string',
+                format: 'date-time',
+              },
+              cancellationReason: {
+                type: 'string',
+              },
+            },
+          },
+        },
+      },
+    })
+    body: {startDate: string; cancellationReason?: string},
+  ): Promise<{cancelledCount: number; message: string}> {
+    // Obtener la consulta original
+    const originalConsultation = await this.consultationRepository.findById(id);
+
+    if (originalConsultation.isFlex) {
+      throw new HttpErrors.BadRequest(
+        'Solo se pueden cancelar fechas de consultas fijas/recurrentes'
+      );
+    }
+
+    if (!originalConsultation.endDate) {
+      throw new HttpErrors.BadRequest(
+        'La consulta debe tener una fecha de fin (endDate) definida'
+      );
+    }
+
+    // Determinar el firstId (usar el firstId de la consulta o su propio id si es la primera)
+    const recurringId = originalConsultation.firstId || id;
+
+    // Obtener la frecuencia semanal (por defecto 1 semana)
+    const weeklyFrequency = originalConsultation.weeklyFrequency || 1;
+
+    // Calcular todas las fechas futuras desde startDate hasta endDate
+    const cancelStartDate = new Date(body.startDate);
+    const endDate = new Date(originalConsultation.endDate);
+    const futureDates: Date[] = [];
+
+    let currentDate = new Date(cancelStartDate);
+    while (currentDate <= endDate) {
+      futureDates.push(new Date(currentDate));
+      // Avanzar según la frecuencia semanal
+      currentDate.setDate(currentDate.getDate() + (7 * weeklyFrequency));
+    }
+
+    // Crear registros de cancelación para cada fecha futura
+    let cancelledCount = 0;
+    for (const futureDate of futureDates) {
+      const futureDateISO = futureDate.toISOString();
+
+      // Verificar si ya existe una cancelación o una consulta para esta fecha
+      const existingCancellation = await this.consultationRepository.findOne({
+        where: {
+          or: [
+            {id: recurringId},
+            {firstId: recurringId},
+          ],
+          startDate: futureDateISO,
+        },
+      });
+
+      if (existingCancellation) {
+        // Si existe, actualizar a cancelada
+        await this.consultationRepository.updateById(existingCancellation.id!, {
+          isCancelled: true,
+          cancelledAt: new Date().toISOString(),
+          cancellationReason: body.cancellationReason,
+        });
+        cancelledCount++;
+      } else {
+        // Si no existe, crear un registro de cancelación
+        await this.consultationRepository.create({
+          firstId: recurringId,
+          startDate: futureDateISO,
+          officeId: originalConsultation.officeId,
+          userId: originalConsultation.userId,
+          isCancelled: true,
+          isFlex: false,
+          weeklyFrequency: weeklyFrequency,
+          cancelledAt: new Date().toISOString(),
+          cancellationReason: body.cancellationReason,
+        });
+        cancelledCount++;
+      }
+    }
+
+    return {
+      cancelledCount,
+      message: `Se cancelaron ${cancelledCount} consulta(s) desde la fecha ${body.startDate}`,
+    };
+  }
+
   @get('/consultations/{id}/cancelled-dates')
   @response(200, {
     description: 'Get all cancelled dates for a recurring consultation',
