@@ -65,3 +65,7 @@ typings/
 
 # Emacs auto-save file
 \#*#
+
+# Uploads folder - ignore all contents but keep the folder
+uploads/*
+!uploads/.gitkeep

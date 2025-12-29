@@ -1,5 +1,6 @@
-import {belongsTo, Entity, hasMany, model, property} from '@loopback/repository';
+import {belongsTo, Entity, hasMany, hasOne, model, property} from '@loopback/repository';
 import {Consultation} from './consultation.model';
+import {File} from './file.model';
 import {Headquarter} from './headquarter.model';
 
 @model()
@@ -28,6 +29,9 @@ export class Office extends Entity {
 
   @hasMany(() => Consultation)
   consultations: Consultation[];
+
+  @hasOne(() => File)
+  image: File;
 
   constructor(data?: Partial<Office>) {
     super(data);

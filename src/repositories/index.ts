@@ -4,3 +4,4 @@ export * from './user.repository';
 export * from './consultation.repository';
 export * from './office.repository';
 export * from './user-access.repository';
+export * from './file.repository';

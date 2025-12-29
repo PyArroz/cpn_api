@@ -1,3 +1,4 @@
+import {inject} from '@loopback/core';
 import {
   Count,
   CountSchema,
@@ -15,15 +16,38 @@ import {
   patch,
   post,
   put,
+  Request,
   requestBody,
   response,
+  Response,
+  RestBindings,
 } from '@loopback/rest';
+import * as fs from 'fs';
 import * as jwt from 'jsonwebtoken';
+import multer from 'multer';
+import * as path from 'path';
+import {v4 as uuidv4} from 'uuid';
 import {JwtTokenConfig} from '../config/JwtTokenConfig';
-import {Headquarter, Office} from '../models';
-import {HeadquarterRepository, OfficeRepository, UserAccessRepository, UserRepository} from '../repositories';
+import {Headquarter} from '../models';
+import {FileRepository, HeadquarterRepository, OfficeRepository, UserAccessRepository, UserRepository} from '../repositories';
 
 export class HeadquartersController {
+  private storage = multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      const uploadPath = path.join(__dirname, '../../uploads');
+      if (!fs.existsSync(uploadPath)) {
+        fs.mkdirSync(uploadPath, {recursive: true});
+      }
+      cb(null, uploadPath);
+    },
+    filename: (_req, file, cb) => {
+      const uniqueName = `${uuidv4()}${path.extname(file.originalname)}`;
+      cb(null, uniqueName);
+    },
+  });
+
+  private upload = multer({storage: this.storage});
+
   constructor(
     @repository(HeadquarterRepository)
     public headquarterRepository: HeadquarterRepository,
@@ -33,6 +57,8 @@ export class HeadquartersController {
     public userAccessRepository: UserAccessRepository,
     @repository(OfficeRepository)
     public officeRepository: OfficeRepository,
+    @repository(FileRepository)
+    public fileRepository: FileRepository,
   ) { }
 
   @post('/headquarters')
@@ -42,54 +68,85 @@ export class HeadquartersController {
   })
   async create(
     @requestBody({
+      description: 'multipart/form-data value.',
+      required: true,
       content: {
-        'application/json': {
+        'multipart/form-data': {
+          'x-parser': 'stream',
           schema: {
             type: 'object',
-            required: ['name'],
             properties: {
               name: {type: 'string'},
               address1: {type: 'string'},
               address2: {type: 'string'},
               zipCode: {type: 'string'},
               phone: {type: 'string'},
-              isDeleted: {type: 'boolean'},
-              updatedAt: {type: 'string', format: 'date-time'},
-              config: {},
-              offices: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  required: ['number', 'hexColor'],
-                  properties: {
-                    number: {type: 'string'},
-                    hexColor: {type: 'string'},
-                  },
-                },
-              },
+              config: {type: 'string'},
+              offices: {type: 'string'},
             },
           },
         },
       },
     })
-    data: Omit<Headquarter, 'id'> & {offices?: Omit<Office, 'id' | 'headquarterId'>[]},
+    request: Request,
+    @inject(RestBindings.Http.RESPONSE) res: Response,
   ): Promise<Headquarter> {
-    const {offices, ...headquarterData} = data;
-    const createdHeadquarter = await this.headquarterRepository.create(headquarterData);
+    return new Promise<Headquarter>((resolve, reject) => {
+      this.upload.any()(request, res, async (err: unknown) => {
+        if (err) reject(err);
+        try {
+          const {name, address1, address2, zipCode, phone, config, offices: officesJson} = request.body;
 
-    // Crear las offices si vienen en el request
-    if (offices && offices.length > 0) {
-      for (const office of offices) {
-        await this.officeRepository.create({
-          ...office,
-          headquarterId: createdHeadquarter.id,
-        });
-      }
-    }
+          const headquarterData: any = {name};
+          if (address1) headquarterData.address1 = address1;
+          if (address2) headquarterData.address2 = address2;
+          if (zipCode) headquarterData.zipCode = zipCode;
+          if (phone) headquarterData.phone = phone;
+          if (config) headquarterData.config = JSON.parse(config);
 
-    // Retornar el headquarter con sus offices
-    return this.headquarterRepository.findById(createdHeadquarter.id!, {
-      include: [{relation: 'offices'}],
+          const createdHeadquarter = await this.headquarterRepository.create(headquarterData);
+
+          // Procesar offices si vienen en el request
+          if (officesJson) {
+            const offices = JSON.parse(officesJson);
+            const files = request.files as Express.Multer.File[];
+
+            for (let i = 0; i < offices.length; i++) {
+              const officeData = offices[i];
+              const createdOffice = await this.officeRepository.create({
+                number: officeData.number,
+                hexColor: officeData.hexColor,
+                headquarterId: createdHeadquarter.id,
+              });
+
+              // Buscar si hay imagen para este office (image_0, image_1, etc.)
+              const imageFile = files?.find(f => f.fieldname === `image_${i}`);
+              if (imageFile) {
+                await this.fileRepository.create({
+                  filename: imageFile.filename,
+                  oname: imageFile.originalname,
+                  mimetype: imageFile.mimetype,
+                  size: imageFile.size,
+                  officeId: createdOffice.id,
+                });
+              }
+            }
+          }
+
+          // Retornar el headquarter con sus offices e imágenes
+          const result = await this.headquarterRepository.findById(createdHeadquarter.id!, {
+            include: [
+              {
+                relation: 'offices',
+                scope: {include: [{relation: 'image'}]},
+              },
+            ],
+          });
+          resolve(result);
+        } catch (error) {
+          reject(error);
+        }
+      });
     });
   }
 
@@ -127,6 +184,9 @@ export class HeadquartersController {
           relation: 'offices',
           scope: {
             include: [
+              {
+                relation: 'image'
+              },
               {
                 relation: 'consultations',
                 scope: {
@@ -194,6 +254,9 @@ export class HeadquartersController {
             scope: {
               include: [
                 {
+                  relation: 'image'
+                },
+                {
                   relation: 'consultations',
                   scope: {
                     include: [
@@ -224,6 +287,9 @@ export class HeadquartersController {
           relation: 'offices',
           scope: {
             include: [
+              {
+                relation: 'image'
+              },
               {
                 relation: 'consultations',
                 scope: {
@@ -284,8 +350,11 @@ export class HeadquartersController {
   async updateById(
     @param.path.number('id') id: number,
     @requestBody({
+      description: 'multipart/form-data value.',
+      required: true,
       content: {
-        'application/json': {
+        'multipart/form-data': {
+          'x-parser': 'stream',
           schema: {
             type: 'object',
             properties: {
@@ -294,72 +363,138 @@ export class HeadquartersController {
               address2: {type: 'string'},
               zipCode: {type: 'string'},
               phone: {type: 'string'},
-              isDeleted: {type: 'boolean'},
-              updatedAt: {type: 'string', format: 'date-time'},
-              config: {},
-              offices: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    id: {type: 'number'},
-                    number: {type: 'string'},
-                    hexColor: {type: 'string'},
-                  },
-                },
-              },
+              config: {type: 'string'},
+              offices: {type: 'string'},
             },
           },
         },
       },
     })
-    data: Partial<Headquarter> & {offices?: (Partial<Office> & {id?: number})[]},
+    request: Request,
+    @inject(RestBindings.Http.RESPONSE) res: Response,
   ): Promise<Headquarter> {
-    const {offices, ...headquarterData} = data;
+    return new Promise<Headquarter>((resolve, reject) => {
+      this.upload.any()(request, res, async (err: unknown) => {
+        if (err) reject(err);
+        try {
+          const {name, address1, address2, zipCode, phone, config, offices: officesJson} = request.body;
 
-    // Actualizar headquarter
-    await this.headquarterRepository.updateById(id, headquarterData);
+          // Actualizar headquarter
+          const headquarterData: any = {};
+          if (name) headquarterData.name = name;
+          if (address1) headquarterData.address1 = address1;
+          if (address2) headquarterData.address2 = address2;
+          if (zipCode) headquarterData.zipCode = zipCode;
+          if (phone) headquarterData.phone = phone;
+          if (config) headquarterData.config = JSON.parse(config);
 
-    // Procesar offices si vienen en el request
-    if (offices !== undefined) {
-      // Obtener las offices actuales del headquarter
-      const currentOffices = await this.officeRepository.find({
-        where: {headquarterId: id}
+          await this.headquarterRepository.updateById(id, headquarterData);
+
+          // Procesar offices si vienen en el request
+          if (officesJson !== undefined) {
+            const offices = JSON.parse(officesJson);
+            const files = request.files as Express.Multer.File[];
+
+            // Obtener las offices actuales del headquarter
+            const currentOffices = await this.officeRepository.find({
+              where: {headquarterId: id},
+            });
+
+            // Obtener los IDs de las offices que vienen en el request
+            const requestOfficeIds = offices.filter((o: any) => o.id).map((o: any) => o.id);
+
+            // Eliminar las offices que ya no están en el arreglo
+            for (const currentOffice of currentOffices) {
+              if (!requestOfficeIds.includes(currentOffice.id!)) {
+                // Eliminar imagen asociada si existe
+                try {
+                  const existingImage = await this.officeRepository.image(currentOffice.id!).get();
+                  if (existingImage) {
+                    const oldFilePath = path.join(__dirname, '../../uploads', existingImage.filename);
+                    if (fs.existsSync(oldFilePath)) {
+                      fs.unlinkSync(oldFilePath);
+                    }
+                    await this.fileRepository.deleteById(existingImage.id);
+                  }
+                } catch (error) {
+                  // No existe imagen previa
+                }
+                await this.officeRepository.deleteById(currentOffice.id!);
+              }
+            }
+
+            // Actualizar o crear las offices del request
+            for (let i = 0; i < offices.length; i++) {
+              const officeData = offices[i];
+              const imageFile = files?.find(f => f.fieldname === `image_${i}`);
+
+              if (officeData.id) {
+                // Actualizar office existente
+                await this.officeRepository.updateById(officeData.id, {
+                  number: officeData.number,
+                  hexColor: officeData.hexColor,
+                  headquarterId: id,
+                });
+
+                // Si hay nueva imagen, reemplazar la anterior
+                if (imageFile) {
+                  try {
+                    const existingImage = await this.officeRepository.image(officeData.id).get();
+                    if (existingImage) {
+                      const oldFilePath = path.join(__dirname, '../../uploads', existingImage.filename);
+                      if (fs.existsSync(oldFilePath)) {
+                        fs.unlinkSync(oldFilePath);
+                      }
+                      await this.fileRepository.deleteById(existingImage.id);
+                    }
+                  } catch (error) {
+                    // No existe imagen previa
+                  }
+
+                  await this.fileRepository.create({
+                    filename: imageFile.filename,
+                    oname: imageFile.originalname,
+                    mimetype: imageFile.mimetype,
+                    size: imageFile.size,
+                    officeId: officeData.id,
+                  });
+                }
+              } else {
+                // Crear nueva office
+                const createdOffice = await this.officeRepository.create({
+                  number: officeData.number,
+                  hexColor: officeData.hexColor,
+                  headquarterId: id,
+                });
+
+                // Si hay imagen, asociarla
+                if (imageFile) {
+                  await this.fileRepository.create({
+                    filename: imageFile.filename,
+                    oname: imageFile.originalname,
+                    mimetype: imageFile.mimetype,
+                    size: imageFile.size,
+                    officeId: createdOffice.id,
+                  });
+                }
+              }
+            }
+          }
+
+          // Retornar el headquarter actualizado con sus offices e imágenes
+          const result = await this.headquarterRepository.findById(id, {
+            include: [
+              {
+                relation: 'offices',
+                scope: {include: [{relation: 'image'}]},
+              },
+            ],
+          });
+          resolve(result);
+        } catch (error) {
+          reject(error);
+        }
       });
-
-      // Obtener los IDs de las offices que vienen en el request
-      const requestOfficeIds = offices
-        .filter(o => o.id)
-        .map(o => o.id!);
-
-      // Eliminar las offices que ya no están en el arreglo
-      for (const currentOffice of currentOffices) {
-        if (!requestOfficeIds.includes(currentOffice.id!)) {
-          await this.officeRepository.deleteById(currentOffice.id!);
-        }
-      }
-
-      // Actualizar o crear las offices del request
-      for (const office of offices) {
-        if (office.id) {
-          // Si tiene id, actualizar la office existente
-          await this.officeRepository.updateById(office.id, {
-            ...office,
-            headquarterId: id,
-          });
-        } else {
-          // Si no tiene id, crear una nueva office
-          await this.officeRepository.create({
-            ...office,
-            headquarterId: id,
-          });
-        }
-      }
-    }
-
-    // Retornar el headquarter actualizado con sus offices
-    return this.headquarterRepository.findById(id, {
-      include: [{relation: 'offices'}],
     });
   }
 
