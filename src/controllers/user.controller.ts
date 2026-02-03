@@ -14,7 +14,7 @@ import {
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import {JwtTokenConfig} from '../config/JwtTokenConfig';
-import {RoleRepository, UserAccessRepository, UserRepository} from '../repositories';
+import {OwnedPackageRepository, RoleRepository, UserAccessRepository, UserRepository} from '../repositories';
 
 export class UserController {
   constructor(
@@ -24,6 +24,8 @@ export class UserController {
     public roleRepository: RoleRepository,
     @repository(UserAccessRepository)
     public userAccessRepository: UserAccessRepository,
+    @repository(OwnedPackageRepository)
+    public ownedPackageRepository: OwnedPackageRepository,
   ) { }
 
 
@@ -59,6 +61,13 @@ export class UserController {
           relation: 'userAccesses',
           scope: {
             include: ['headquarter']
+          }
+        },
+        {
+          relation: 'ownedPackages',
+          scope: {
+            include: ['package'],
+            order: ['ownDate DESC']
           }
         }
       ],
@@ -224,6 +233,15 @@ export class UserController {
 
 
     if (!existingUser) throw new HttpErrors.NotFound('User not found');
+
+    // Si se envía packageId, crear un registro en el historial
+    if (user.packageId !== undefined && user.packageId !== null) {
+      await this.ownedPackageRepository.create({
+        userId: user.id,
+        packageId: user.packageId,
+        ownDate: new Date().toISOString()
+      });
+    }
 
     await this.userRepository.updateById(user.id, {
       email: user.email,

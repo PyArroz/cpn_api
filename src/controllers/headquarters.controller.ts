@@ -261,7 +261,17 @@ export class HeadquartersController {
                   scope: {
                     include: [
                       {
-                        relation: 'user'
+                        relation: 'user',
+                        scope: {
+                          include: [
+                            {
+                              relation: 'ownedPackage',
+                              scope: {
+                                include: ['package']
+                              }
+                            }
+                          ]
+                        }
                       }
                     ]
                   }
@@ -295,7 +305,17 @@ export class HeadquartersController {
                 scope: {
                   include: [
                     {
-                      relation: 'user'
+                      relation: 'user',
+                      scope: {
+                        include: [
+                          {
+                            relation: 'ownedPackages',
+                            scope: {
+                              include: ['package']
+                            }
+                          }
+                        ]
+                      }
                     }
                   ]
                 }

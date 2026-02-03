@@ -1,4 +1,5 @@
 import {belongsTo, Entity, hasMany, model, property} from '@loopback/repository';
+import {OwnedPackage} from './owned-package.model';
 import {Role} from './role.model';
 import {UserAccess} from './user-access.model';
 
@@ -83,6 +84,9 @@ export class User extends Entity {
     default: false
   })
   hasFixedPlan?: boolean;
+
+  @hasMany(() => OwnedPackage)
+  ownedPackages: OwnedPackage[];
 
   constructor(data?: Partial<User>) {
     super(data);
