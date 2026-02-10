@@ -8,3 +8,4 @@ export * from './role.repository';
 export * from './user-access.repository';
 export * from './user.repository';
 
+export * from './headquarter-fee.repository';

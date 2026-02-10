@@ -10,3 +10,4 @@ export * from './user-access.model';
 export * from './user.model';
 
 export * from './owned-package.model';
+export * from './headquarter-fee.model';

@@ -19,6 +19,21 @@ export class Package extends Entity {
   })
   cost?: number;
 
+  @property({
+    type: 'boolean',
+    default: false
+  })
+  isFixed?: boolean;
+
+  @property({
+    type: 'boolean',
+    default: false
+  })
+  isDeleted?: boolean;
+
+
+
+
 
   constructor(data?: Partial<Package>) {
     super(data);

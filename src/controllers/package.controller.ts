@@ -73,7 +73,17 @@ export class PackageController {
   async find(
     @param.filter(Package) filter?: Filter<Package>,
   ): Promise<Package[]> {
-    return this.packageRepository.find(filter);
+    // Agregar filtro para excluir paquetes eliminados
+    const whereCondition = filter?.where ?
+      {and: [filter.where, {isDeleted: {neq: true}}]} :
+      {isDeleted: {neq: true}};
+
+    const updatedFilter = {
+      ...filter,
+      where: whereCondition
+    };
+
+    return this.packageRepository.find(updatedFilter);
   }
 
   @patch('/packages')
@@ -108,12 +118,18 @@ export class PackageController {
     @param.path.number('id') id: number,
     @param.filter(Package, {exclude: 'where'}) filter?: FilterExcludingWhere<Package>
   ): Promise<Package> {
-    return this.packageRepository.findById(id, filter);
+    const packageData = await this.packageRepository.findById(id, filter);
+    // Verificar que no esté eliminado
+    if (packageData.isDeleted) {
+      throw new Error('Package not found or has been deleted');
+    }
+    return packageData;
   }
 
   @patch('/packages/{id}')
-  @response(204, {
+  @response(200, {
     description: 'Package PATCH success',
+    content: {'application/json': {schema: getModelSchemaRef(Package)}},
   })
   async updateById(
     @param.path.number('id') id: number,
@@ -124,9 +140,29 @@ export class PackageController {
         },
       },
     })
-    packageData: Package,
-  ): Promise<void> {
-    await this.packageRepository.updateById(id, packageData);
+    packageData: Partial<Package>,
+  ): Promise<Package> {
+    // Obtener el paquete existente
+    const existingPackage = await this.packageRepository.findById(id);
+
+    // Verificar que no esté ya eliminado
+    if (existingPackage.isDeleted) {
+      throw new Error('Cannot update a deleted package');
+    }
+
+    // Marcar el paquete existente como eliminado
+    await this.packageRepository.updateById(id, {isDeleted: true});
+
+    // Crear un nuevo paquete con los datos modificados
+    const newPackageData = {
+      ...existingPackage,
+      ...packageData,
+      id: undefined, // Remover el ID para que se genere uno nuevo
+      isDeleted: false // Asegurar que el nuevo paquete no esté eliminado
+    };
+
+    const newPackage = await this.packageRepository.create(newPackageData);
+    return newPackage;
   }
 
   @put('/packages/{id}')

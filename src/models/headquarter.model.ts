@@ -1,4 +1,5 @@
 import {Entity, hasMany, model, property} from '@loopback/repository';
+import {HeadquarterFee} from './headquarter-fee.model';
 import {Office} from './office.model';
 
 @model()
@@ -15,6 +16,12 @@ export class Headquarter extends Entity {
     required: true,
   })
   name: string;
+
+  @property({
+    type: 'number',
+    required: true,
+  })
+  fee: number;
 
   @property({
     type: 'string',
@@ -56,6 +63,9 @@ export class Headquarter extends Entity {
 
   @hasMany(() => Office)
   offices: Office[];
+
+  @hasMany(() => HeadquarterFee)
+  headquarterFees: HeadquarterFee[];
 
   constructor(data?: Partial<Headquarter>) {
     super(data);

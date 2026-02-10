@@ -17,3 +17,4 @@ export * from './user-user-access.controller';
 export * from './user.controller';
 export * from './user-owned-package.controller';
 export * from './owned-package-package.controller';
+export * from './headquarter-headquarter-fee.controller';

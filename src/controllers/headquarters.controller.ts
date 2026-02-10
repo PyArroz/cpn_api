@@ -29,7 +29,7 @@ import * as path from 'path';
 import {v4 as uuidv4} from 'uuid';
 import {JwtTokenConfig} from '../config/JwtTokenConfig';
 import {Headquarter} from '../models';
-import {FileRepository, HeadquarterRepository, OfficeRepository, UserAccessRepository, UserRepository} from '../repositories';
+import {FileRepository, HeadquarterFeeRepository, HeadquarterRepository, OfficeRepository, UserAccessRepository, UserRepository} from '../repositories';
 
 export class HeadquartersController {
   private storage = multer.diskStorage({
@@ -59,6 +59,8 @@ export class HeadquartersController {
     public officeRepository: OfficeRepository,
     @repository(FileRepository)
     public fileRepository: FileRepository,
+    @repository(HeadquarterFeeRepository)
+    public headquarterFeeRepository: HeadquarterFeeRepository,
   ) { }
 
   @post('/headquarters')
@@ -81,6 +83,7 @@ export class HeadquartersController {
               address2: {type: 'string'},
               zipCode: {type: 'string'},
               phone: {type: 'string'},
+              fee: {type: 'number'},
               config: {type: 'string'},
               offices: {type: 'string'},
             },
@@ -95,16 +98,26 @@ export class HeadquartersController {
       this.upload.any()(request, res, async (err: unknown) => {
         if (err) reject(err);
         try {
-          const {name, address1, address2, zipCode, phone, config, offices: officesJson} = request.body;
+          const {name, address1, address2, zipCode, phone, config, offices: officesJson, fee} = request.body;
 
           const headquarterData: any = {name};
           if (address1) headquarterData.address1 = address1;
           if (address2) headquarterData.address2 = address2;
           if (zipCode) headquarterData.zipCode = zipCode;
           if (phone) headquarterData.phone = phone;
+          if (fee) headquarterData.fee = parseFloat(fee);
           if (config) headquarterData.config = JSON.parse(config);
 
           const createdHeadquarter = await this.headquarterRepository.create(headquarterData);
+
+          // Crear registro de HeadquarterFee si se proporcionó fee
+          if (fee !== undefined && createdHeadquarter.id) {
+            await this.headquarterFeeRepository.create({
+              fee: parseFloat(fee),
+              created: new Date().toISOString(),
+              headquarterId: createdHeadquarter.id,
+            });
+          }
 
           // Procesar offices si vienen en el request
           if (officesJson) {
@@ -199,6 +212,9 @@ export class HeadquartersController {
               }
             ]
           }
+        },
+        {
+          relation: 'headquarterFees'
         }
       ]
     });
@@ -278,6 +294,9 @@ export class HeadquartersController {
                 }
               ]
             }
+          },
+          {
+            relation: 'headquarterFees'
           }
         ]
       });
@@ -322,6 +341,9 @@ export class HeadquartersController {
               }
             ]
           }
+        },
+        {
+          relation: 'headquarterFees'
         }
       ]
     });
@@ -383,6 +405,7 @@ export class HeadquartersController {
               address2: {type: 'string'},
               zipCode: {type: 'string'},
               phone: {type: 'string'},
+              fee: {type: 'number'},
               config: {type: 'string'},
               offices: {type: 'string'},
             },
@@ -397,7 +420,7 @@ export class HeadquartersController {
       this.upload.any()(request, res, async (err: unknown) => {
         if (err) reject(err);
         try {
-          const {name, address1, address2, zipCode, phone, config, offices: officesJson} = request.body;
+          const {name, address1, address2, zipCode, phone, config, offices: officesJson, fee} = request.body;
 
           // Actualizar headquarter
           const headquarterData: any = {};
@@ -406,9 +429,19 @@ export class HeadquartersController {
           if (address2) headquarterData.address2 = address2;
           if (zipCode) headquarterData.zipCode = zipCode;
           if (phone) headquarterData.phone = phone;
+          if (fee) headquarterData.fee = parseFloat(fee);
           if (config) headquarterData.config = JSON.parse(config);
 
           await this.headquarterRepository.updateById(id, headquarterData);
+
+          // Crear registro de HeadquarterFee si se actualizó el fee
+          if (fee !== undefined) {
+            await this.headquarterFeeRepository.create({
+              fee: parseFloat(fee),
+              created: new Date().toISOString(),
+              headquarterId: id,
+            });
+          }
 
           // Procesar offices si vienen en el request
           if (officesJson !== undefined) {
