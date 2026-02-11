@@ -9,6 +9,7 @@ import {RestApplication} from '@loopback/rest';
 import {ServiceMixin} from '@loopback/service-proxy';
 import path from 'path';
 import {MySequence} from './sequence';
+import {RecurringConsultationSchedulerService} from './services/recurring-consultation-scheduler.service';
 
 export {ApplicationConfig};
 
@@ -29,6 +30,10 @@ export class CpnApplication extends BootMixin(
       path: '/explorer',
     });
     this.component(RestExplorerComponent);
+
+    this.bind('services.RecurringConsultationScheduler').toClass(
+      RecurringConsultationSchedulerService,
+    );
 
     this.projectRoot = __dirname;
     // Customize @loopback/boot Booter Conventions here

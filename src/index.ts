@@ -1,7 +1,33 @@
 import {ApplicationConfig, CpnApplication} from './application';
 import {DbInitializer} from './services/db-initializer';
+import {RecurringConsultationSchedulerService} from './services/recurring-consultation-scheduler.service';
+import cron from 'node-cron';
 
 export * from './application';
+
+/** Programa el cron diario de reagendado de consultas recurrentes (ejecución a la 01:00). */
+function scheduleRecurringConsultationsCron(app: CpnApplication) {
+  const task = cron.schedule(
+    '0 1 * * *', // Todos los días a la 01:00
+    async () => {
+      try {
+        const scheduler = await app.get<RecurringConsultationSchedulerService>(
+          'services.RecurringConsultationScheduler',
+        );
+        const result = await scheduler.scheduleNextOccurrences({futureWindowDays: 90});
+        if (result.created > 0 || result.seriesProcessed > 0) {
+          console.log(
+            `[Cron] Reagendado: ${result.created} consulta(s) creada(s), ${result.seriesProcessed} serie(s) procesada(s).`,
+          );
+        }
+      } catch (err) {
+        console.error('[Cron] Error en reagendado de consultas recurrentes:', err);
+      }
+    },
+    {scheduled: true, timezone: process.env.TZ ?? 'America/Mexico_City'},
+  );
+  return task;
+}
 
 export async function main(options: ApplicationConfig = {}) {
   const app = new CpnApplication(options);
@@ -10,8 +36,10 @@ export async function main(options: ApplicationConfig = {}) {
   const dbInitializer = new DbInitializer(await app.get('repositories.RoleRepository'), await app.get('repositories.UserRepository'));
   await dbInitializer.initialize();
 
-
   await app.start();
+
+  scheduleRecurringConsultationsCron(app);
+  console.log('Cron de consultas recurrentes: diario a las 01:00 (TZ:', process.env.TZ ?? 'America/Mexico_City', ')');
 
   const url = app.restServer.url;
   console.log(`Server is running at ${url}`);

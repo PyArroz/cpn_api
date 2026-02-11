@@ -6,6 +6,7 @@ import {
   repository,
   Where,
 } from '@loopback/repository';
+import {inject} from '@loopback/core';
 import {
   del,
   get,
@@ -20,11 +21,14 @@ import {
 } from '@loopback/rest';
 import {Consultation} from '../models';
 import {ConsultationRepository} from '../repositories';
+import {RecurringConsultationSchedulerService} from '../services/recurring-consultation-scheduler.service';
 
 export class ConsultationController {
   constructor(
     @repository(ConsultationRepository)
     public consultationRepository: ConsultationRepository,
+    @inject('services.RecurringConsultationScheduler')
+    private recurringScheduler: RecurringConsultationSchedulerService,
   ) { }
 
   @post('/consultations')
@@ -53,6 +57,41 @@ export class ConsultationController {
     );
 
     return this.consultationRepository.create(consultation);
+  }
+
+  @post('/consultations/schedule-recurring')
+  @response(200, {
+    description: 'Crea las próximas ocurrencias de consultas recurrentes (reagendado). Ejecutar periódicamente (p. ej. cron diario).',
+    content: {
+      'application/json': {
+        schema: {
+          type: 'object',
+          properties: {
+            created: {type: 'number'},
+            seriesProcessed: {type: 'number'},
+          },
+        },
+      },
+    },
+  })
+  async scheduleRecurring(
+    @requestBody({
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            properties: {
+              futureWindowDays: {type: 'number', description: 'Ventana en días hacia el futuro (default 90)'},
+            },
+          },
+        },
+      },
+    })
+    body?: {futureWindowDays?: number},
+  ): Promise<{created: number; seriesProcessed: number}> {
+    return this.recurringScheduler.scheduleNextOccurrences({
+      futureWindowDays: body?.futureWindowDays,
+    });
   }
 
   @get('/consultations/count')

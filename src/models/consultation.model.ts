@@ -108,6 +108,10 @@ export class Consultation extends Entity {
   - No se podrán reservar otras consultas en ese mismo día y hora en el mismo consultorio aunque la consulta futura aún no esté creada
   en la base de datos.
 
+  La creación de las ocurrencias futuras (reagendado) la realiza el servicio de consultas recurrentes, invocado por el endpoint
+  POST /consultations/schedule-recurring. Ese endpoint debe ejecutarse periódicamente (p. ej. cron diario) para crear las
+  próximas ocurrencias hasta una ventana configurable (por defecto 90 días) o hasta endDate de la serie.
+
   */
 
   @property({
