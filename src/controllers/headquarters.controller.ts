@@ -281,7 +281,7 @@ export class HeadquartersController {
                         scope: {
                           include: [
                             {
-                              relation: 'ownedPackage',
+                              relation: 'ownedPackages',
                               scope: {
                                 include: ['package']
                               }
